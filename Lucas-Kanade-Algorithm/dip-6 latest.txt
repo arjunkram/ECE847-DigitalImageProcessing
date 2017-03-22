@@ -1,0 +1,260 @@
+// Homework.cpp : Defines the entry point for the console application.
+//
+
+#include <afxwin.h>  // necessary for MFC to work properly
+#include "Homework.h"
+#include "../../src/blepo.h"
+#include<queue>
+#include<stack>
+
+
+
+#ifdef _DEBUG
+#define new DEBUG_NEW
+#endif
+
+using namespace blepo;
+
+//bilinear interpolation
+float bilinearinterp(ImgFloat& gradd, float x, float y)
+{
+
+	int x0 = floor(x);
+	int y0 = floor(y);
+	float bi = 0;
+	float alphax = x - x0;
+	float alphay = y - y0;
+
+	
+	if (x0 + 1 < gradd.Width() && x0 + 1 > 0 && y0 + 1 > 0 && y0 + 1 < gradd.Height() )
+	{
+		bi = (1 - alphax)*(1 - alphay)*gradd(x0, y0) + (alphax*(1 - alphay)*gradd(x0 + 1, y0)) + ((1 - alphax)*alphay*gradd(x0, y0 + 1)) + (alphax*alphay*gradd(x0 + 1, y0 + 1));
+	}
+	return bi;
+	
+}
+
+
+
+
+
+
+int main(int argc, const char* argv[], const char* envp[])
+{
+	try
+	{
+		// Initialize MFC and return if failure
+		HMODULE hModule = ::GetModuleHandle(NULL);
+		if (hModule == NULL || !AfxWinInit(hModule, NULL, ::GetCommandLine(), 0))
+		{
+			printf("Fatal Error: MFC initialization failed (hModule = %x)\n", (int)hModule);
+			return 1;
+		}
+		if (argc == 6)
+		{
+			ImgGray gry2;
+			ImgBgr clr1;
+			ImgFloat flt1, Gx, Gy;
+			//Load files
+			CString path = "../../images/";
+			int fframe = atoi(argv[2]);
+			int lframe = atoi(argv[3]);
+			double sigma = atof(argv[4]);
+			int window = atoi(argv[5]);
+			CString filename;
+			CString format = argv[1];
+			filename.Format(format, fframe);
+			path += filename;
+			Load(path, &clr1);
+
+			//Convert to float
+			Convert(clr1, &flt1);
+
+			//Obtaining Gx and Gy
+			Gradient(flt1, 1, &Gx, &Gy);
+
+
+			//for computing 2x2 Gradient matrix
+			float lambda2,lambda1,mineigval;
+			int threshold = 600;
+			ImgFloat corner_img(clr1.Width(), clr1.Height());
+			Set(&corner_img, 0);
+			ImgFloat gxx(clr1.Width(), clr1.Height());
+			Set(&gxx, 0);
+			ImgFloat gxy(clr1.Width(), clr1.Height());
+			Set(&gxy, 0); 
+			ImgFloat gyy(clr1.Width(), clr1.Height());
+			Set(&gyy, 0);
+			for (int y = 1; y < clr1.Height() - 1; y++)
+			{
+				for (int x = 1; x < clr1.Width() - 1; x++)
+				{
+					for (int l = -1; l <= 1; l++)
+					{
+						for (int k = -1; k <= 1; k++)
+						{
+							gxx(x, y) += Gx(k + x, l + y)*Gx(k + x, l + y);
+							gyy(x, y) += Gy(k + x, l + y)*Gy(k + x, l + y);
+							gxy(x, y) += Gx(k + x, l + y)*Gy(k + x, l + y);
+						}
+					}
+
+					//lambda 2 is the smaller of the two lamda's
+					lambda1= (float)((gxx(x,y) + gyy(x, y) + sqrt((gxx(x, y) - gyy(x, y))*(gxx(x, y) - gyy(x, y)) + 4 * gxy(x, y)*gxy(x, y))) / 2.0);
+					lambda2 = (float)((gxx(x, y) + gyy(x, y) - sqrt((gxx(x, y) - gyy(x, y))*(gxx(x, y) - gyy(x, y)) + 4 * gxy(x, y)*gxy(x, y))) / 2.0);
+					mineigval = min(lambda1, lambda2);
+					if (mineigval > threshold)//evaluating cornerness and thresholding
+					{
+						corner_img(x, y) = mineigval;
+					}
+					else
+					{
+						corner_img(x, y) = 0;
+					}
+				}
+			}
+
+			// performing non-maximal suppression
+			ImgFloat supprsd;
+			NonmaxSuppress8(corner_img, &supprsd);
+			Figure nonsup;
+			nonsup.Draw(supprsd); nonsup.SetTitle("Non-maximal suppresed corner image");
+
+			//creating a vector of feature points and detecting and storing good features in it
+			//displaying the feature points on the original image
+			vector <Point2f> featpts;
+			Point2f pt;
+			Bgr clr;
+			for (int y = 1; y < clr1.Height() - 1; y++)
+			{
+				for (int x = 1; x < clr1.Width() - 1; x++)
+				{
+					if (supprsd(x, y) > threshold)
+					{
+
+						pt.x = x; pt.y = y;
+						featpts.push_back(pt);
+						Point pt1;
+						pt1.x = pt.x; pt1.y = pt.y;
+						DrawCircle(pt1, 1, &clr1, clr.RED);
+					}
+				}
+			}
+
+
+			Figure detect;
+			detect.Draw(clr1);
+			detect.SetTitle(" features image");
+			Figure final;
+			final.SetTitle("Tracked image");
+
+			//Lucas-Kanade
+			ImgBgr finaloutput;
+			ImgFloat vidcopy, Gx1, Gy1, nextcopy;
+			int iter = 0;
+			float u[2] = { 0 };
+			float v[2] = { 0 };
+			ImgGray vid, next;
+
+
+			float ex, ey;
+			float xx1, xy1, yy1;
+
+			for (int i = fframe; i < lframe; i++)
+			{
+
+				filename.Format(format, i);
+				path = "../../images/";
+				path = path + filename;
+				Load(path, &vid);
+				Convert(vid, &vidcopy);
+				Gradient(vidcopy, sigma, &Gx1, &Gy1);
+				filename.Format(format, i + 1);
+				path = "../../images/";
+				path = path + filename;
+				Load(path, &next);
+				Convert(next, &nextcopy);
+
+
+				//loop starts	
+				for (int j = 0; j < featpts.size(); j++)
+				{
+
+					iter = 0;
+					xx1 = 0;
+					xy1 = 0;
+					yy1 = 0;
+					//compute 2x2 gradient matrix
+					for (float y = -(window - 1) / 2; y <= (window - 1) / 2; y++)
+					{
+						for (float x = -(window - 1) / 2; x <= (window - 1) / 2; x++)
+						{
+
+							yy1 = yy1 + bilinearinterp(Gy1, featpts[j].x + x, featpts[j].y + y)*bilinearinterp(Gy1, featpts[j].x + x, featpts[j].y + y);
+							xx1 = xx1 + bilinearinterp(Gx1, featpts[j].x + x, featpts[j].y + y)*bilinearinterp(Gx1, featpts[j].x + x, featpts[j].y + y);
+							xy1 = xy1 + bilinearinterp(Gx1, featpts[j].x + x, featpts[j].y + y)*bilinearinterp(Gy1, featpts[j].x + x, featpts[j].y + y);
+						}
+					}
+					for (iter = 0; iter < 5;iter++)
+					{
+						ex = 0;
+						ey = 0;
+						//computing the error matrix
+						for (int y = -(window - 1) / 2; y <= (window - 1) / 2; y++)
+							for (int x = -(window - 1) / 2; x <= (window - 1) / 2; x++)
+							{
+								ex = ex + (bilinearinterp(Gx1, x + featpts[j].x, y + featpts[j].y)*(bilinearinterp(vidcopy, x + featpts[j].x, y + featpts[j].y) - bilinearinterp(nextcopy, x + featpts[j].x + u[0], y + featpts[j].y + u[1])));
+								ey = ey + (bilinearinterp(Gy1, x + featpts[j].x, y + featpts[j].y)*(bilinearinterp(vidcopy, x + featpts[j].x, y + featpts[j].y) - bilinearinterp(nextcopy, x + featpts[j].x + u[0], y + featpts[j].y + u[1])));
+							}
+						//solving linear system
+						float determinant = (yy1*xx1) - (xy1*xy1);
+						if (determinant != 0)
+						{
+							v[0] = (1 / determinant)*((ex*yy1) - (ey*xy1));
+							v[1] = (1 / determinant)*((ey*xx1) - (ex*xy1));
+
+						}
+						
+						u[0] = u[0] + v[0];
+						u[1] = u[1] + v[1];
+
+					}
+					featpts[j].x = featpts[j].x + u[0];
+					featpts[j].y = featpts[j].y + u[1];
+					u[0] = 0;
+					u[1] = 0;
+				}
+
+				Convert(nextcopy, &finaloutput);
+				for (int k = 0; k < featpts.size(); k++)//final output
+				{
+					Point pt2;
+					pt2.x = featpts[k].x;
+					pt2.y = featpts[k].y;
+					DrawCircle(pt2, 1, &finaloutput, clr.RED);
+				}
+
+				final.Draw(finaloutput);
+
+			}
+
+
+
+
+
+
+
+			// Loop forever until user presses Ctrl-C in terminal window.
+		}
+		else
+			printf("the number of arguments is insufficient");
+		EventLoop();
+
+		return 0;
+	}
+
+	catch (const Exception &b)
+	{
+		b.Display();
+	}
+}

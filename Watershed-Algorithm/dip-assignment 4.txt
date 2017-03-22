@@ -1,0 +1,770 @@
+// Homework.cpp : Defines the entry point for the console application.
+//
+
+#include <afxwin.h>  // necessary for MFC to work properly
+#include "Homework.h"
+#include "../../src/blepo.h"
+#include<queue>
+#include<stack>
+
+
+
+#ifdef _DEBUG
+#define new DEBUG_NEW
+#endif
+
+using namespace blepo;
+
+
+void grad(ImgGray gry1,int mu,int w,ImgFloat *out, ImgFloat *out1,double(&g)[100],double(&gd)[100])
+{
+	ImgFloat tmp(gry1.Width(), gry1.Height());
+	ImgFloat tmp1(gry1.Width(), gry1.Height());
+	for (int y = 0; y < gry1.Height(); y++)
+	{
+		for (int x = mu; x < gry1.Width() - mu; x++)
+		{
+			float val = 0;
+			for (int i = 0; i <= w - 1; i++)
+			{
+				val += gd[i] * gry1(x + mu - i, y);
+				tmp(x, y) = val;
+			}
+		}
+	}
+
+	for (int y = mu; y < gry1.Height() - mu; y++)
+	{
+		for (int x = 0; x < gry1.Width(); x++)
+		{
+			float val = 0;
+			for (int i = 0; i <= w - 1; i++)
+			{
+				val += g[i] * tmp(x, y + mu - i);
+				(*out)(x, y) = val;
+			}
+		}
+	}
+	
+
+	//separable convolution for getting Gy
+	for (int y = 0; y < gry1.Height(); y++)
+	{
+		for (int x = mu; x < (gry1.Width() - mu); x++)
+		{
+			double val = 0;
+			for (int i = 0; i <= w - 1; i++)
+			{
+				val += g[i] * gry1(x + mu - i, y);
+				tmp1(x, y) = val;
+			}
+		}
+	}
+
+	for (int y = mu; y < (gry1.Height() - mu); y++)
+	{
+		for (int x = 0; x < gry1.Width(); x++)
+		{
+			double val = 0;
+			for (int i = 0; i <= w - 1; i++)
+			{
+				val += gd[i] * tmp1(x, y + mu - i);
+				(*out1)(x, y) = val;
+			}
+		}
+	}
+	
+}
+void magni(ImgGray gry1,ImgFloat *gmag,ImgFloat out,ImgFloat out1)
+{
+	//To obtain Gmag
+	for (int y = 0; y < gry1.Height(); y++)
+	{
+		for (int x = 0; x < gry1.Width(); x++)
+		{
+			(*gmag)(x, y) = max(abs(out(x, y)), abs(out1(x, y)));
+
+
+		}
+	}
+
+
+	
+}
+
+void Flood(ImgGray img, int x, int y, int NewColor, ImgInt *labels)
+{
+	
+	int w = img.Width() - 1;
+	int h = img.Height() - 1;
+	std::stack <Point> frontier;
+	int color = img(x, y);
+	Point pt; pt.x = x; pt.y = y;
+	frontier.push(pt);
+	Point p;
+	(*labels)(x, y) = NewColor;
+	while (!frontier.empty())
+	{
+		p = frontier.top();
+		frontier.pop();
+		
+		
+		if (p.x < w)
+		{
+			if (img(p.x + 1, p.y) == color && (*labels)(p.x + 1, p.y) != NewColor)
+			{
+
+				frontier.push(Point(p.x + 1, p.y));
+				(*labels)(p.x + 1, p.y) = NewColor;
+			}
+		}
+		
+		if (p.x > 0)
+		{
+			if (img(p.x - 1, p.y) == color && (*labels)(p.x - 1, p.y) != NewColor)
+			{
+				frontier.push(Point(p.x - 1, p.y));
+				(*labels)(p.x - 1, p.y) = NewColor;
+			}
+		}
+		
+		if (p.y > 0)
+		{
+			if (img(p.x, p.y - 1) == color && (*labels)(p.x, p.y - 1) != NewColor)
+			{
+				frontier.push(Point(p.x, p.y - 1));
+				(*labels)(p.x, p.y - 1) = NewColor;
+			}
+		}
+		
+		if (p.y < h)
+		{
+			if (img(p.x, p.y + 1) == color && (*labels)(p.x, p.y + 1) != NewColor)
+			{
+				frontier.push(Point(p.x, p.y + 1));
+				(*labels)(p.x, p.y + 1) = NewColor;
+			}
+		}
+		if (p.x > 0 && p.y > 0)
+		{
+			if (img(p.x-1, p.y - 1) == color && (*labels)(p.x-1, p.y - 1) != NewColor)
+			{
+				frontier.push(Point(p.x-1, p.y - 1));
+				(*labels)(p.x-1, p.y - 1) = NewColor;
+			}
+		}
+		if (p.x > 0 && p.y <h)
+		{
+			if (img(p.x - 1, p.y + 1) == color && (*labels)(p.x - 1, p.y +1) != NewColor)
+			{
+				frontier.push(Point(p.x - 1, p.y + 1));
+				(*labels)(p.x - 1, p.y + 1) = NewColor;
+			}
+		}
+		if (p.x <w && p.y > 0)
+		{
+			if (img(p.x + 1, p.y - 1) == color && (*labels)(p.x + 1, p.y - 1) != NewColor)
+			{
+				frontier.push(Point(p.x + 1, p.y - 1));
+				(*labels)(p.x + 1, p.y - 1) = NewColor;
+			}
+		}
+		if (p.x <w && p.y < h)
+		{
+			if (img(p.x + 1, p.y + 1) == color && (*labels)(p.x + 1, p.y + 1) != NewColor)
+			{
+				frontier.push(Point(p.x + 1, p.y + 1));
+				(*labels)(p.x + 1, p.y + 1) = NewColor;
+			}
+		}
+	} 
+}
+void Watershed(ImgGray& chmfr_gray, ImgInt *op)
+{
+	//creating an array pixel list for each greylevel
+	Array <Point> pixellist[256];
+	for (int y = 0; y<chmfr_gray.Height(); y++)
+		for (int x = 0; x < chmfr_gray.Width(); x++)
+		{
+			pixellist[chmfr_gray(x, y)].Push(Point(x, y));
+			(*op)(x, y) = -1;
+		}
+	
+	int global_label = 0;
+	//grow existing catchment basins by one pixel
+	std::queue <Point> frontier1, frontier2;
+	for (int g = 0; g < 256; g++)
+	{
+		for (int i = 0; i < pixellist[g].Len(); i++)
+		{
+			const Point& pt = pixellist[g][i];
+			int tmp;
+			if (pt.x > 0)
+			{
+				tmp = (*op)(pt.x - 1, pt.y);
+				if (tmp >= 0)
+				{
+					(*op)(pt.x, pt.y) = tmp;
+					frontier1.push(pt);
+				}
+			}
+			if (pt.y > 0)
+			{
+				tmp = (*op)(pt.x, pt.y - 1);
+				if (tmp >= 0)
+				{
+					(*op)(pt.x, pt.y) = tmp;
+					frontier1.push(pt);
+				}
+			}
+			if (pt.x < (*op).Width() - 1)
+			{
+				tmp = (*op)(pt.x + 1, pt.y);
+				if (tmp >= 0)
+				{
+					(*op)(pt.x, pt.y) = tmp;
+					frontier1.push(pt);
+				}
+			}
+			if (pt.y < (*op).Height() - 1)
+			{
+				tmp = (*op)(pt.x, pt.y + 1);
+				if (tmp >= 0)
+				{
+					(*op)(pt.x, pt.y) = tmp;
+					frontier1.push(pt);
+				}
+			}
+			
+		}
+
+		//continue to grow existing basins by one pixel thick each iteration by expanding frontier
+		while (!frontier1.empty())
+		{
+			while (!frontier1.empty())
+			{
+				Point pt = frontier1.front();
+				frontier1.pop();
+				int lab = (*op)(pt.x, pt.y);
+				Point pt2;
+				if (pt.x > 0)
+				{
+					if (chmfr_gray(pt.x - 1, pt.y) <= g && (*op)(pt.x - 1, pt.y) < 0)
+					{
+						(*op)(pt.x - 1, pt.y) = lab;
+						frontier2.push(Point(pt.x - 1, pt.y));
+					}
+				}
+				if (pt.x < chmfr_gray.Width() - 1)
+				{
+					if (chmfr_gray(pt.x + 1, pt.y) <= g && (*op)(pt.x + 1, pt.y) < 0)
+					{
+						(*op)(pt.x + 1, pt.y) = lab;
+						frontier2.push(Point(pt.x + 1, pt.y));
+					}
+				}
+				if (pt.y > 0)
+				{
+					if (chmfr_gray(pt.x , pt.y-1) <= g && (*op)(pt.x, pt.y-1) < 0)
+					{
+						(*op)(pt.x , pt.y-1) = lab;
+						frontier2.push(Point(pt.x , pt.y-1));
+					}
+				}
+				if (pt.y < (*op).Height() - 1)
+				{
+					if (chmfr_gray(pt.x, pt.y+1) <= g && (*op)(pt.x, pt.y+1) < 0)
+					{
+						(*op)(pt.x, pt.y+1) = lab;
+						frontier2.push(Point(pt.x, pt.y+1));
+					}
+				}
+
+				if (pt.x > 0 && pt.y > 0)
+				{
+					if (chmfr_gray(pt.x - 1, pt.y-1) <= g && (*op)(pt.x - 1, pt.y-1) < 0)
+					{
+						(*op)(pt.x - 1, pt.y-1) = lab;
+						frontier2.push(Point(pt.x - 1, pt.y-1));
+					}
+				}				
+				if (pt.x < chmfr_gray.Width() - 1 && pt.y < (*op).Height() - 1)
+					if (chmfr_gray(pt.x + 1, pt.y+1) <= g && (*op)(pt.x + 1, pt.y+1) < 0)
+					{
+						(*op)(pt.x + 1, pt.y+1) = lab;
+						frontier2.push(Point(pt.x + 1, pt.y+1));
+					}
+				if (pt.x > 0 && pt.y < (*op).Height() - 1)
+				{
+					if (chmfr_gray(pt.x - 1, pt.y+1) <= g && (*op)(pt.x - 1, pt.y+1) < 0)
+					{
+						(*op)(pt.x - 1, pt.y+1) = lab;
+						frontier2.push(Point(pt.x - 1, pt.y+1));
+					}
+				}
+				if (pt.x < chmfr_gray.Width() - 1 && pt.y > 0)
+				{
+					if (chmfr_gray(pt.x + 1, pt.y-1) <= g && (*op)(pt.x + 1, pt.y-1) < 0)
+					{
+						(*op)(pt.x + 1, pt.y-1) = lab;
+						frontier2.push(Point(pt.x + 1, pt.y-1));
+					}
+				}
+			}
+			frontier1 = frontier2;
+			frontier2.empty();
+		}
+		//create new catchment basins
+		for (int i = 0; i < pixellist[g].Len(); i++)
+		{
+			const Point& pt = pixellist[g][i];
+			int x = pt.x;
+			int y = pt.y;
+
+			if (chmfr_gray(x, y) == g && (*op)(x, y) < 0)
+			{
+				Flood(chmfr_gray, x, y, global_label++, &(*op));
+			}
+			
+		}
+
+	}
+}
+void Watershedm(ImgGray& chmfr_gray, ImgInt *op)
+{
+	//creating an array pixel list for each greylevel
+	Array <Point> pixellist[256];
+	for (int y = 0; y<chmfr_gray.Height(); y++)
+		for (int x = 0; x < chmfr_gray.Width(); x++)
+		{
+			pixellist[chmfr_gray(x, y)].Push(Point(x, y));
+			(*op)(x, y) = -1;
+		}
+	
+	int global_label = 0;
+	//grow existing catchment basins by one pixel
+	std::queue <Point> frontier, frontier2;
+	for (int g = 0; g < 256; g++)
+	{
+		for (int i = 0; i < pixellist[g].Len(); i++)
+		{
+			int tmp;
+			const Point& pt = pixellist[g][i];
+			if (pt.x > 0)
+			{
+				tmp = (*op)(pt.x - 1, pt.y);
+				if (tmp >= 0)
+				{
+					(*op)(pt.x, pt.y) = tmp;
+					frontier.push(pt);
+				}
+			}
+			if (pt.y > 0)
+			{
+				tmp = (*op)(pt.x, pt.y - 1);
+				if (tmp >= 0)
+				{
+					(*op)(pt.x, pt.y) = tmp;
+					frontier.push(pt);
+				}
+			}
+			if (pt.x < (*op).Width() - 1)
+			{
+				tmp = (*op)(pt.x + 1, pt.y);
+				if (tmp >= 0)
+				{
+					(*op)(pt.x, pt.y) = tmp;
+					frontier.push(pt);
+				}
+			}
+			if (pt.y < (*op).Height() - 1)
+			{
+				tmp = (*op)(pt.x, pt.y + 1);
+				if (tmp >= 0)
+				{
+					(*op)(pt.x, pt.y) = tmp;
+					frontier.push(pt);
+				}
+			}
+
+		}
+		//continue to grow existing basins by one pixel thick each iteration by expanding frontier	
+			while (!frontier.empty())
+			{
+				Point pt = frontier.front();
+				frontier.pop();
+				int tmp = (*op)(pt.x, pt.y);
+				Point pt2;
+				if (pt.x > 0)
+				{
+					if (chmfr_gray(pt.x - 1, pt.y) <= g && (*op)(pt.x - 1, pt.y) < 0)
+					{
+						(*op)(pt.x - 1, pt.y) = tmp;
+						frontier.push(Point(pt.x - 1, pt.y));
+					}
+				}
+				if (pt.x < chmfr_gray.Width() - 1)
+				{
+					if (chmfr_gray(pt.x + 1, pt.y) <= g && (*op)(pt.x + 1, pt.y) < 0)
+					{
+						(*op)(pt.x + 1, pt.y) = tmp;
+						frontier.push(Point(pt.x + 1, pt.y));
+					}
+				}
+				if (pt.y > 0)
+				{
+					if (chmfr_gray(pt.x, pt.y - 1) <= g && (*op)(pt.x, pt.y - 1) < 0)
+					{
+						(*op)(pt.x, pt.y - 1) = tmp;
+						frontier.push(Point(pt.x, pt.y - 1));
+					}
+				}
+				if (pt.y < chmfr_gray.Height() - 1)
+				{
+					if (chmfr_gray(pt.x, pt.y + 1) <= g && (*op)(pt.x, pt.y + 1) < 0)
+					{
+						(*op)(pt.x, pt.y + 1) = tmp;
+						frontier.push(Point(pt.x, pt.y + 1));
+					}
+				}
+
+				if (pt.x > 0 && pt.y > 0)
+				{
+					if (chmfr_gray(pt.x - 1, pt.y - 1) <= g && (*op)(pt.x - 1, pt.y - 1) < 0)
+					{
+						(*op)(pt.x - 1, pt.y - 1) = tmp;
+						frontier.push(Point(pt.x - 1, pt.y - 1));
+					}
+				}
+				if (pt.x < chmfr_gray.Width() - 1 && pt.y < chmfr_gray.Height() - 1)
+					if (chmfr_gray(pt.x + 1, pt.y + 1) <= g && (*op)(pt.x + 1, pt.y + 1) < 0)
+					{
+						(*op)(pt.x + 1, pt.y + 1) = tmp;
+						frontier.push(Point(pt.x + 1, pt.y + 1));
+					}
+				if (pt.x > 0 && pt.y < chmfr_gray.Height() - 1)
+				{
+					if (chmfr_gray(pt.x - 1, pt.y + 1) <= g && (*op)(pt.x - 1, pt.y + 1) < 0)
+					{
+						(*op)(pt.x - 1, pt.y + 1) = tmp;
+						frontier.push(Point(pt.x - 1, pt.y + 1));
+					}
+				}
+				if (pt.x < chmfr_gray.Width() - 1 && pt.y > 0)
+				{
+					if (chmfr_gray(pt.x + 1, pt.y - 1) <= g && (*op)(pt.x + 1, pt.y - 1) < 0)
+					{
+						(*op)(pt.x + 1, pt.y - 1) = tmp;
+						frontier.push(Point(pt.x + 1, pt.y - 1));
+					}
+				}
+			}
+			
+		//create new catchment basins
+		if (g == 0)
+		{
+			for (int i = 0; i < pixellist[g].Len(); i++)
+			{
+				const Point& pt = pixellist[g][i];
+				int x = pt.x;
+				int y = pt.y;
+
+				if (chmfr_gray(x, y) == g && (*op)(x, y) == -1)
+				{
+					Flood(chmfr_gray, x, y, global_label++, &(*op));
+					
+				}
+
+			}
+		}
+
+	}
+}
+void Chamfer(ImgGray& img2, ImgFloat *chmfr)
+{
+	int tot = img2.Height()*img2.Width() + 1;
+	for (int y = 0; y < img2.Height(); y++)
+	{
+		for (int x = 0; x < img2.Width(); x++)
+		{
+			if (img2(x, y) == 255)
+				(*chmfr)(x, y) = 0;
+			else
+			{
+				if (x - 1 >= 0 && y - 1 >= 0)
+				{
+					(*chmfr)(x, y) = min((1 + (*chmfr)(x - 1, y)), (1 + (*chmfr)(x, y - 1)));
+				}
+				if (x - 1 < 0 && y - 1 >= 0)
+				{
+					(*chmfr)(x, y) = (1 + (*chmfr)(x, y - 1));
+				}
+				else if (x - 1 >= 0 && y - 1 < 0)
+				{
+					(*chmfr)(x, y) = (1 + (*chmfr)(x - 1, y));
+				}
+				else if (x - 1 < 0 && y - 1 < 0)
+				{
+					(*chmfr)(x, y) = tot;
+				}
+			}
+		}
+	}
+	float val = 0;
+
+	for (int y = img2.Height() - 1; y >= 0; y--)
+	{
+		for (int x = img2.Width() - 1; x >= 0; x--)
+		{
+			if (img2(x, y) == 255)
+				(*chmfr)(x, y) = 0;
+			else
+			{
+				if (x + 1 <= img2.Width() - 1 && y + 1 <= img2.Height() - 1)
+				{
+					val = min((*chmfr)(x, y), min((1 + (*chmfr)(x + 1, y)), (1 + (*chmfr)(x, y + 1))));
+				}
+				if (x + 1 > img2.Width() - 1 && y + 1 <= img2.Height() - 1)
+				{
+					val = min((1 + (*chmfr)(x, y)), (1 + (*chmfr)(x, y + 1)));
+				}
+				 if (y + 1 > img2.Height() - 1 && x + 1 <= img2.Width() - 1)
+				{
+					val = min((1 + (*chmfr)(x + 1, y)), (1 + (*chmfr)(x, y)));
+				}
+				 if (y + 1 > img2.Height() - 1 && x + 1 > img2.Width() - 1)
+				{
+					(*chmfr)(x, y) = tot;
+				}
+				(*chmfr)(x, y) = min((*chmfr)(x, y), val);
+			}
+		}
+
+	}
+
+}
+
+
+
+
+
+
+
+int main(int argc, const char* argv[], const char* envp[])
+{
+	try
+	{
+		// Initialize MFC and return if failure
+		HMODULE hModule = ::GetModuleHandle(NULL);
+		if (hModule == NULL || !AfxWinInit(hModule, NULL, ::GetCommandLine(), 0))
+		{
+			printf("Fatal Error: MFC initialization failed (hModule = %x)\n", (int)hModule);
+			return 1;
+		}
+
+		ImgGray gry1, gry2;
+		Figure fig1, fig2;
+		CString gryimage = "../../images/";
+		gryimage += argv[1];
+		Load(gryimage, &gry1);
+		fig1.Draw(gry1);
+		fig1.SetTitle("Original image");
+		ImgBinary bnryH(gry1.Width(), gry1.Height());
+		float tH = 0, tL = 0;
+		if (argc < 3)
+		{
+			
+			printf("\nThe threshold value you need to specify is 80 for holes.pgm \n The threshold value you need to specify is 35 for cells_small.pgm\n");
+		}
+		else
+		{
+			tH = atof(argv[2]);
+			tL = 5;
+			ImgGray imgH(gry1.Width(), gry1.Height());
+			ImgGray imgL(gry1.Width(), gry1.Height());
+			imgL = gry1;
+			for (int y = 0; y < gry1.Height(); y++)
+				for (int x = 0; x < gry1.Width(); x++)
+				{
+					if (gry1(x, y) < tL)
+						imgL(x, y) = 255;
+					else
+						imgL(x, y) = 0;
+					if (gry1(x, y) < tH)
+						imgH(x, y) = 255;
+					else
+						imgH(x, y) = 0;
+				}
+			for (int y = 0; y < gry1.Height(); y++)
+				for (int x = 0; x < gry1.Width(); x++)
+				{
+					if (imgL(x, y) == 255)
+					{
+						if (gry1(x, y) < tH)
+							imgL(x, y) = 255;
+					}
+					else
+						imgL(x, y) = imgH(x, y);
+				}
+			fig2.Draw(imgL);
+			fig2.SetTitle("Thresholded image");
+			
+
+			//Performing chamfering
+			ImgFloat chmfr(gry1.Width(), gry1.Height());
+			Chamfer(imgL, &chmfr);
+			Figure champ;
+			champ.Draw(chmfr);
+			champ.SetTitle("chamfer image");
+
+			//Performing watershed
+			ImgGray chmfrgry(gry1.Width(), gry1.Height());
+			Convert(chmfr, &chmfrgry);
+			ImgInt wtrshd(gry1.Width(), gry1.Height());
+			Watershed(chmfrgry, &wtrshd);
+			Figure watershed1;
+			watershed1.Draw(wtrshd);
+			watershed1.SetTitle("Non-Marker Watershed");
+
+			//Detecting edges
+			ImgGray edgee(gry1.Width(), gry1.Height());
+			Set(&edgee, 0);
+			for (int y = 0; y < gry1.Height()-1; y++)
+				for (int x = 0; x < gry1.Width()-1; x++)
+					if (wtrshd(x, y) != wtrshd(x + 1, y) || wtrshd(x, y) != wtrshd(x , y+1))
+						edgee(x, y) = 255;
+		
+			Figure edgeim;
+			edgeim.Draw(edgee);
+
+			//OR-ing egde image with thresholded image
+			ImgGray oredimg(gry1.Width(), gry1.Height());
+			Or(imgL, edgee, &oredimg);
+			Figure orr;
+			orr.Draw(oredimg);
+			orr.SetTitle("Or-ed image");
+
+
+
+			//building a 1D guassian convolution kernel
+			float f = 2.5;
+			float sigma = 1.5;
+			//sigma = atof(argv[1]);
+			int mu = round((f*sigma) - 0.5);
+			int w = 2 * mu + 1;
+			double g[100];
+			double sum = 0;
+			for (int i = 0; i <= w - 1; i++)
+			{
+				g[i] = exp((-(i - mu)*(i - mu)) / (2 * sigma*sigma));
+				sum = sum + g[i];
+			}
+			for (int i = 0; i <= w - 1; i++)
+			{
+				g[i] = g[i] / sum;
+			}
+
+			//printing the gaussian convolution kernel
+			printf("\nthe gaussian convolution kernel is\n");
+			for (int i = 0; i <= w - 1; i++)
+			{
+				printf("\t %f ", g[i]);
+			}
+
+
+			//building a guassian derivative convolution kernel G'
+			double gd[100];
+			double sum1 = 0;
+			for (int i = 0; i <= w - 1; i++)
+			{
+				gd[i] = (i - mu) * exp((-(i - mu)*(i - mu)) / (2 * sigma*sigma));
+				sum1 += gd[i] * i;
+			}
+			for (int i = 0; i <= w - 1; i++)
+			{
+				gd[i] = gd[i] / sum1;
+			}
+
+			//printing the gaussian derivative convolution kernel G'
+			printf("\nthe gaussian derivative convolution kernel is\n");
+			for (int i = 0; i <= w - 1; i++)
+			{
+				printf("\t %f ", gd[i]);
+			}
+
+			//Calling function to find gx and gy
+			ImgFloat out(gry1.Width(), gry1.Height()), out1(gry1.Width(), gry1.Height());
+			grad(gry1, mu, w, &out, &out1, g, gd);
+
+			//Calling function to find magnitude image
+			ImgFloat gmag(gry1.Width(), gry1.Height());
+			magni(gry1, &gmag, out, out1);
+			Figure mag;
+			mag.Draw(gmag);
+			mag.SetTitle("Gradient magnitude image");
+
+			//Marker-Based Watershed
+			ImgInt outputt(gmag.Width(), gmag.Height());
+			ImgInt gmagint(gmag.Width(), gmag.Height());
+			Set(&gmagint, 0);
+			Convert(gmag, &gmagint);
+			for (int y = 0; y < gmagint.Height(); y++)
+			{
+				for (int x = 0; x < gmagint.Width(); x++)
+				{
+					gmagint(x, y) = max(gmagint(x, y), 1);
+					if (oredimg(x, y) == 255)
+						gmagint(x, y) = 0;
+				}
+
+			}
+			Figure mark;
+			mark.Draw(gmagint);
+			ImgGray gmaggray(gmag.Width(), gmag.Height());
+			Set(&gmaggray, 0);
+			Convert(gmagint, &gmaggray);
+			Watershedm(gmaggray, &outputt);
+			Figure finl;
+			finl.Draw(outputt);
+
+			//displaying the final image
+			ImgGray imgfinal(gmag.Width(), gmag.Height());
+			for (int y = 1; y < outputt.Height() - 1; y++)
+				for (int x = 1; x < outputt.Width() - 1; x++)
+				{
+					if (x != 0 && y != 0)
+					{
+						if (outputt(x - 1, y) != outputt(x + 1, y))
+							imgfinal(x, y) = 255;
+						if (outputt(x, y - 1) != outputt(x, y + 1))
+							imgfinal(x, y) = 255;
+						
+					}
+				}
+			Bgr clr (0,255,0);
+			
+			ImgBgr final(gmag.Width(), gmag.Height());
+			Convert(gry1, &final);
+
+			for (int y = 0; y < out.Height() - 1; y++)
+				for (int x = 0; x < out.Width() - 1; x++)
+				{
+					if (imgfinal(x, y) == 255)
+						final(x, y) = clr;
+				}
+			Figure finish;
+			finish.Draw(final);
+			finish.SetTitle("Final Image");
+
+			// Loop forever until user presses Ctrl-C in terminal window.
+
+			EventLoop();
+
+			return 0;
+		}
+	}
+	catch (const Exception &b)
+	{
+		b.Display();
+	}
+}

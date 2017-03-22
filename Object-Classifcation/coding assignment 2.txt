@@ -1,0 +1,201 @@
+// Homework.cpp : Defines the entry point for the console application.
+//
+
+#include <afxwin.h>  // necessary for MFC to work properly
+#include "Homework.h"
+#include "../../src/blepo.h"
+
+#ifdef _DEBUG
+#define new DEBUG_NEW
+#endif
+
+using namespace blepo;
+
+//function to find out the maximum number of foreground regions
+int max(ImgInt &conimg)
+{
+	int maximum = 0;
+	for (int y = 0; y < conimg.Height(); y++)
+	{
+		for (int x = 0; x < conimg.Width(); x++)
+		{
+			if (maximum < conimg(x, y))
+				maximum = conimg(x, y);
+		}
+	}
+
+	return maximum;
+}
+
+
+
+
+
+int main(int argc, const char* argv[], const char* envp[])
+{
+	try
+	{
+		// Initialize MFC and return if failure
+		HMODULE hModule = ::GetModuleHandle(NULL);
+		if (hModule == NULL || !AfxWinInit(hModule, NULL, ::GetCommandLine(), 0))
+		{
+			printf("Fatal Error: MFC initialization failed (hModule = %x)\n", (int)hModule);
+			return 1;
+		}
+
+
+
+
+		ImgGray gry1, gry2;
+		ImgBinary bnryL, bnryH, bnryperimeter;
+		Figure fig1, fig2, fig3, fig4;
+		CString gryimage = "../../images/";
+		gryimage += argv[1];
+		Load(gryimage, &gry1);
+		fig1.Draw(gry1);
+		Threshold(gry1, 110, &bnryL);//low threshold
+		fig2.Draw(bnryL);
+		Threshold(gry1, 190, &bnryH);//high threshold
+		fig3.Draw(bnryH);
+
+
+		for (int y = 0; y < gry1.Height(); y++)// finding seed pixel and flood filling
+		{
+			for (int x = 0; x < gry1.Width(); x++)
+			{
+				if (bnryH(x, y) == 1)
+				{
+
+
+					FloodFill8(bnryH, x, y, 1, &bnryL);
+
+
+				}
+
+			}
+		}
+
+		Erode3x3Cross(bnryL, &bnryL);//closing
+		Dilate3x3(bnryL, &bnryL);
+		FillHoles(&bnryL, false);
+		fig4.Draw(bnryL);//Displays double threshold image
+
+
+
+		//connected components
+		ImgInt conimg;
+		ConnectedComponents8(bnryL, &conimg);
+		Figure fig5;
+		fig5.Draw(conimg);
+
+		//to find max.no of regions
+		int noofregions;
+		noofregions = max(conimg);
+		printf("%d\n", noofregions);
+
+
+		//for getting perimeter
+		Erode3x3(bnryL, &bnryperimeter);
+		Xor(bnryL, bnryperimeter, &bnryperimeter);
+		Figure fig6;
+		fig6.Draw(bnryperimeter);
+		int label, count;
+		for ( label = 0; label <= noofregions; label++)
+		{
+			 count = 0;
+			for (int y = 0; y < bnryperimeter.Height(); y++)
+			{
+				for (int x = 0; x < bnryperimeter.Width(); x++)
+				{
+					if (conimg(x, y) == label && bnryperimeter(x, y) == 1)
+						count++;
+				}
+			}
+			printf("perimeter of region  %d is %d\n",label, count);
+		}
+
+		
+
+		//to compute the region properties
+		for (int i = 1; i <= noofregions; i++)
+		{
+			double m00 = 0, m01 = 0, m10 = 0, m11 = 0, m02 = 0, m20 = 0, mu00 = 0, mu11 = 0, mu20 = 0, mu02 = 0, mu01 = 0, mu10 = 0, lambda1 = 0, lambda2 = 0;
+			for (int y = 0; y < conimg.Height(); y++)
+			{
+				for (int x = 0; x < conimg.Width(); x++)
+				{
+
+					if (conimg(x, y) == i)
+					{
+						m00 += 1;
+						m10 +=  x;
+						m01 +=  y;
+						m11 +=  x*y;
+						m20 +=  x*x;
+						m02 +=  y*y;
+					}
+				}
+			}
+			mu00 = m00;
+			double xbar = m10 / m00;
+			double ybar = m01 / m00;
+			mu11 = m11 - ybar*m10;
+			mu20 = m20 - xbar*m10;
+			mu02 = m02 - ybar*m01;
+			printf("FRUIT - %d\n", i);
+			printf("The moment m00 is %.2f \n", m00);
+			printf("The moment m01 is %.2f \n", m01);
+			printf("The moment m01 is %.2f \n", m01);
+			printf("The moment m10 is %.2f \n", m10);
+			printf("The moment m11 is %.2f \n", m11);
+			printf("The moment m20 is %.2f \n", m20);
+			printf("The moment m02 is %.2f \n", m02);
+			printf("The moment mu00 is %.2f \n", mu00);
+			printf("The moment mu01 is %.2f \n", mu01);
+			printf("The moment mu10 is %.2f\n", mu10);
+			printf("The moment mu11 is %.2f \n", mu11);
+			printf("The moment mu20 is %.2f \n", mu20);
+			printf("The moment mu02 is %.2f \n", mu02);
+
+			//To calculate eccentricity
+
+
+			double a = mu20 + mu02;
+			double b = mu20 - mu02;
+			double c = sqrt(4 * mu11 * mu11 + b * b);
+			lambda1 = (a + c) / (2 * mu00);
+			lambda2 = (a - c) / (2 * mu00);
+			double eccentricity = sqrt((lambda1 - lambda2) / lambda1);
+			printf("The eccentricity is %.2f \n\n\n\n", eccentricity);
+			//To calculate direction
+			double direction = 0.5 * (atan2(2 * mu11, (mu20 - mu02)));
+
+
+			//To calculate major and minor axes
+			double major_axis_x = sqrt(lambda1) * cos(direction);
+			double major_axis_y = sqrt(lambda1) * sin(direction);
+			double minor_axis_x = sqrt(lambda2) * sin(direction);
+			double minor_axis_y = sqrt(lambda2) * (-cos(direction));
+
+		}
+
+
+
+
+
+
+
+
+
+
+		// Loop forever until user presses Ctrl-C in terminal window.
+		EventLoop();
+
+		return 0;
+	}
+
+	catch (const Exception &b)
+	{
+		b.Display();
+	}
+}

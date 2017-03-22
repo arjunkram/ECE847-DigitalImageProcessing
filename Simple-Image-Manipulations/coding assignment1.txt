@@ -1,0 +1,76 @@
+// Homework.cpp : Defines the entry point for the console application.
+//
+
+#include <afxwin.h>  // necessary for MFC to work properly
+#include "Homework.h"
+#include "../../src/blepo.h"
+
+#ifdef _DEBUG
+#define new DEBUG_NEW
+#endif
+
+using namespace blepo;
+
+void application(ImgGray *gry1, ImgBgr *bgr)
+{
+	for (int y = 0; y < (*bgr).Height(); y++)
+	{
+		for (int x = 0; x < (*bgr).Width(); x++)
+		{
+			unsigned char pixel = (*gry1)(x, y);
+			(*gry1)(x, y) = 0;
+			if ((*bgr).Height() < 100 && (*bgr).Width() < 100)
+			{
+				(*gry1)(x, y) = 255;
+			}
+			else
+			{
+				for (int y = (((*bgr).Height() / 2) - 50); y < (((*bgr).Height() / 2) + 50); y++)
+				{
+					for (int x = (((*bgr).Width() / 2) - 50); x < (((*bgr).Width() / 2) + 50); x++)
+					{
+						(*gry1)(x, y) = 255;
+					}
+}
+			}
+		}
+	}
+}
+
+int main(int argc, const char* argv[], const char* envp[])
+{
+    // Initialize MFC and return if failure
+    HMODULE hModule = ::GetModuleHandle(NULL);
+    if (hModule == NULL || !AfxWinInit(hModule, NULL, ::GetCommandLine(), 0))
+    {
+        printf("Fatal Error: MFC initialization failed (hModule = %x)\n", (int)hModule);
+        return 1;
+    }
+
+    // Load image.
+    ImgBgr bgr;
+	ImgGray gry1,gry2;
+    Load(L"../../images/holes.pgm", &bgr);
+	//Load(L"../../images/banana.pgm", &img_gry2);
+	Convert(bgr, &gry1);
+	application(&gry1, &bgr);
+
+	
+
+
+
+
+
+
+
+    // Display image in figure window.
+    Figure fig1,fig2;
+    fig1.Draw(bgr);
+	fig2.Draw(gry1);
+
+
+    // Loop forever until user presses Ctrl-C in terminal window.
+    EventLoop();
+
+    return 0;
+}

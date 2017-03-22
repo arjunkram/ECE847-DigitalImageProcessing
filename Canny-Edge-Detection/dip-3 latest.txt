@@ -1,0 +1,647 @@
+// Homework.cpp : Defines the entry point for the console application.
+//
+
+#include <afxwin.h>  // necessary for MFC to work properly
+#include "Homework.h"
+#include "../../src/blepo.h"
+
+
+#ifdef _DEBUG
+#define new DEBUG_NEW
+#endif
+
+using namespace blepo;
+
+//function to find out the maximum number of foreground regions
+
+
+
+
+void grad(ImgGray gry1,int mu,int w,ImgFloat *out, ImgFloat *out1,double(&g)[100],double(&gd)[100])
+{
+	ImgFloat tmp(gry1.Width(), gry1.Height());
+	ImgFloat tmp1(gry1.Width(), gry1.Height());
+	for (int y = 0; y < gry1.Height(); y++)
+	{
+		for (int x = mu; x < gry1.Width() - mu; x++)
+		{
+			float val = 0;
+			for (int i = 0; i <= w - 1; i++)
+			{
+				val += gd[i] * gry1(x + mu - i, y);
+				tmp(x, y) = val;
+			}
+		}
+	}
+
+	for (int y = mu; y < gry1.Height() - mu; y++)
+	{
+		for (int x = 0; x < gry1.Width(); x++)
+		{
+			float val = 0;
+			for (int i = 0; i <= w - 1; i++)
+			{
+				val += g[i] * tmp(x, y + mu - i);
+				(*out)(x, y) = val;
+			}
+		}
+	}
+	
+
+	//separable convolution for getting Gy
+	for (int y = 0; y < gry1.Height(); y++)
+	{
+		for (int x = mu; x < (gry1.Width() - mu); x++)
+		{
+			double val = 0;
+			for (int i = 0; i <= w - 1; i++)
+			{
+				val += g[i] * gry1(x + mu - i, y);
+				tmp1(x, y) = val;
+			}
+		}
+	}
+
+	for (int y = mu; y < (gry1.Height() - mu); y++)
+	{
+		for (int x = 0; x < gry1.Width(); x++)
+		{
+			double val = 0;
+			for (int i = 0; i <= w - 1; i++)
+			{
+				val += gd[i] * tmp1(x, y + mu - i);
+				(*out1)(x, y) = val;
+			}
+		}
+	}
+	
+}
+void magni(ImgGray gry1,ImgFloat *gmag,ImgFloat out,ImgFloat out1)
+{
+	//To obtain Gmag
+	for (int y = 0; y < gry1.Height(); y++)
+	{
+		for (int x = 0; x < gry1.Width(); x++)
+		{
+			(*gmag)(x, y) = max(abs(out(x, y)), abs(out1(x, y)));
+
+
+		}
+	}
+
+	//To obtain gphase
+	/*for (int y = 0; y < gry1.Height(); y++)
+	{
+		for (int x = 0; x < gry1.Width(); x++)
+		{
+
+			(*gphase)(x, y) = atan2(out1(x, y), out(x, y));
+
+		}
+	}*/
+
+	
+}
+void supprsd(ImgGray gry1,ImgFloat gphase,ImgFloat gmag,ImgFloat *gsup)
+{
+	for (int y = 1; y < (gry1.Height() - 1); y++)
+	{
+		for (int x = 1; x < (gry1.Width() - 1); x++)
+		{
+			if (gphase(x, y) < 0)
+			{
+				gphase(x, y) += (float)3.14;
+			}
+			if (gphase(x, y) < (float)(3.14 / 8) || (gphase(x, y) >= (float)(7 * 3.14 / 8)))
+			{
+				if (gmag(x + 1, y) > gmag(x, y) || gmag(x - 1, y) > gmag(x, y))
+					(*gsup)(x, y) = 0;
+			}
+
+			else if (gphase(x, y) >= (float)(3.14 / 8) && gphase(x, y) < (float)(3 * 3.14 / 8))
+			{
+				if (gmag(x + 1, y + 1) > gmag(x, y) || gmag(x - 1, y - 1)>gmag(x, y))
+					(*gsup)(x, y) = 0;
+			}
+			else if (gphase(x, y) >= (float)(3 * 3.14 / 8) && gphase(x, y) < (float)(5 * 3.14 / 8))
+			{
+				if (gmag(x, y - 1) > gmag(x, y) || gmag(x, y + 1) > gmag(x, y))
+					(*gsup)(x, y) = 0;
+			}
+			else  if (gphase(x, y) >= (float)(5 * 3.14 / 8) && gphase(x, y) < (float)(7 * 3.14 / 8))
+			{
+				if (gmag(x + 1, y - 1) > gmag(x, y) || gmag(x - 1, y + 1) > gmag(x, y))
+					(*gsup)(x, y) = 0;
+			}
+
+		}
+
+	}
+}
+void canny(ImgGray gry1,ImgFloat gsup,ImgBinary *bnryH)
+{
+	
+
+	// calculating histogram of suppressed image
+	int h[256];
+	for (int i = 0; i<256; i++)
+		h[i] = 0;
+
+	for (int y = 0; y<gsup.Height(); y++)
+	{
+		for (int x = 0; x<gsup.Width(); x++)
+		{
+			if (gsup(x, y) > 0)
+			{
+				h[(int)(gsup(x, y))] = h[(int)(gsup(x, y))] + 1;
+			}
+		}
+	}
+	
+	
+
+	//To find total number of pixels
+	int count = 0;
+	for (int i = 0; i < 255; i++)
+		count = count + h[i];
+
+	// 10% of high pixels
+	count = count*0.1;
+	int count1 = 0;
+
+	//calculating high  and low threshold 
+	float tH = 0, tL = 0;
+	for (int i = 255; i >= 0; i--)
+	{
+		count1 = count1 + h[i];
+		if (count1 >= count)
+		{
+			tH = (float)i;
+			break;
+		}
+	}
+
+	tL = tH / 5;
+	ImgBinary bnryL(gry1.Width(), gry1.Height());
+	 for (int y = 0; y < gry1.Height(); y++)
+	{
+		for (int x = 0; x < gry1.Width(); x++)
+		{
+			if (gsup(x, y) > tH)
+			{
+				(*bnryH)(x, y) = 1;
+			}
+			else
+			{
+				(*bnryH)(x, y) = 0;
+			}
+		}
+	}
+
+	for (int y = 1; y < (gry1.Height() - 1); y++)
+	{
+		for (int x = 1; x < (gry1.Width() - 1); x++)
+		{
+			if ((*bnryH)(x, y) == 1)
+			{
+				if (gsup(x + 1, y) >= tL)
+					(*bnryH)(x + 1, y) = 1;
+
+				if (gsup(x - 1, y) >= tL)
+					(*bnryH)(x - 1, y) = 1;
+
+				if (gsup(x, y + 1) >= tL)
+					(*bnryH)(x, y + 1) = 1;
+
+				if (gsup(x, y - 1) >= tL)
+					(*bnryH)(x, y - 1) = 1;
+
+				if (gsup(x + 1, y + 1) >= tL)
+					(*bnryH)(x + 1, y + 1) = 1;
+
+				if (gsup(x + 1, y - 1) >= tL)
+					(*bnryH)(x + 1, y - 1) = 1;
+
+				if (gsup(x - 1, y + 1) >= tL)
+					(*bnryH)(x - 1, y + 1) = 1;
+
+				if (gsup(x - 1, y - 1) >= tL)
+					(*bnryH)(x - 1, y - 1) = 1;
+			}
+		}
+	}
+
+
+	for (int y = (gry1.Height() - 2); y > 1; y--)
+	{
+		for (int x = (gry1.Width() - 2); x > 1; x--)
+		{
+			if ((*bnryH)(x, y) == 1)
+			{
+				if (gsup(x + 1, y) >= tL)
+					(*bnryH)(x + 1, y) = 1;
+				if (gsup(x, y + 1) >= tL)
+					(*bnryH)(x, y + 1) = 1;
+				if (gsup(x + 1, y + 1) >= tL)
+					(*bnryH)(x + 1, y + 1) = 1;
+				if (gsup(x - 1, y + 1) >= tL)
+					(*bnryH)(x - 1, y + 1) = 1;
+				if (gsup(x + 1, y - 1) >= tL)
+					(*bnryH)(x + 1, y - 1) = 1;
+				if (gsup(x, y - 1) >= tL)
+					(*bnryH)(x, y - 1) = 1;
+				if (gsup(x - 1, y) >= tL)
+					(*bnryH)(x - 1, y) = 1;
+				if (gsup(x - 1, y - 1) >= tL)
+					(*bnryH)(x - 1, y - 1) = 1;
+			}
+		}
+	}
+}
+void canny1(ImgGray gry1, ImgFloat gsup, ImgBinary *bnryH)
+{
+
+
+	// calculating histogram of suppressed image
+	int h[256];
+	for (int i = 0; i<256; i++)
+		h[i] = 0;
+
+	for (int y = 0; y<gsup.Height(); y++)
+	{
+		for (int x = 0; x<gsup.Width(); x++)
+		{
+			if (gsup(x, y) > 0)
+			{
+				h[(int)(gsup(x, y))] = h[(int)(gsup(x, y))] + 1;
+			}
+		}
+	}
+
+
+
+	//To find total number of pixels
+	int count = 0;
+	for (int i = 0; i < 255; i++)
+		count = count + h[i];
+
+	// 10% of high pixels
+	count = count*0.75;
+	int count1 = 0;
+
+	//calculating high  and low threshold 
+	float tH = 0, tL = 0;
+	for (int i = 255; i >= 0; i--)
+	{
+		count1 = count1 + h[i];
+		if (count1 >= count)
+		{
+			tH = (float)i;
+			break;
+		}
+	}
+
+	tL = tH / 5;
+	ImgBinary bnryL(gry1.Width(), gry1.Height());
+	for (int y = 0; y < gry1.Height(); y++)
+	{
+		for (int x = 0; x < gry1.Width(); x++)
+		{
+			if (gsup(x, y) > tH)
+			{
+				(*bnryH)(x, y) = 1;
+			}
+			else
+			{
+				(*bnryH)(x, y) = 0;
+			}
+		}
+	}
+
+	for (int y = 1; y < (gry1.Height() - 1); y++)
+	{
+		for (int x = 1; x < (gry1.Width() - 1); x++)
+		{
+			if ((*bnryH)(x, y) == 1)
+			{
+				if (gsup(x + 1, y) >= tL)
+					(*bnryH)(x + 1, y) = 1;
+
+				if (gsup(x - 1, y) >= tL)
+					(*bnryH)(x - 1, y) = 1;
+
+				if (gsup(x, y + 1) >= tL)
+					(*bnryH)(x, y + 1) = 1;
+
+				if (gsup(x, y - 1) >= tL)
+					(*bnryH)(x, y - 1) = 1;
+
+				if (gsup(x + 1, y + 1) >= tL)
+					(*bnryH)(x + 1, y + 1) = 1;
+
+				if (gsup(x + 1, y - 1) >= tL)
+					(*bnryH)(x + 1, y - 1) = 1;
+
+				if (gsup(x - 1, y + 1) >= tL)
+					(*bnryH)(x - 1, y + 1) = 1;
+
+				if (gsup(x - 1, y - 1) >= tL)
+					(*bnryH)(x - 1, y - 1) = 1;
+			}
+		}
+	}
+
+
+	for (int y = (gry1.Height() - 2); y > 1; y--)
+	{
+		for (int x = (gry1.Width() - 2); x > 1; x--)
+		{
+			if ((*bnryH)(x, y) == 1)
+			{
+				if (gsup(x + 1, y) >= tL)
+					(*bnryH)(x + 1, y) = 1;
+				if (gsup(x, y + 1) >= tL)
+					(*bnryH)(x, y + 1) = 1;
+				if (gsup(x + 1, y + 1) >= tL)
+					(*bnryH)(x + 1, y + 1) = 1;
+				if (gsup(x - 1, y + 1) >= tL)
+					(*bnryH)(x - 1, y + 1) = 1;
+				if (gsup(x + 1, y - 1) >= tL)
+					(*bnryH)(x + 1, y - 1) = 1;
+				if (gsup(x, y - 1) >= tL)
+					(*bnryH)(x, y - 1) = 1;
+				if (gsup(x - 1, y) >= tL)
+					(*bnryH)(x - 1, y) = 1;
+				if (gsup(x - 1, y - 1) >= tL)
+					(*bnryH)(x - 1, y - 1) = 1;
+			}
+		}
+	}
+}
+
+
+
+
+int main(int argc, const char* argv[], const char* envp[])
+{
+	try
+	{
+		// Initialize MFC and return if failure
+		HMODULE hModule = ::GetModuleHandle(NULL);
+		if (hModule == NULL || !AfxWinInit(hModule, NULL, ::GetCommandLine(), 0))
+		{
+			printf("Fatal Error: MFC initialization failed (hModule = %x)\n", (int)hModule);
+			return 1;
+		}
+		ImgBgr imgclr;
+		ImgGray gry1, gry2;
+		Figure fig1, fig2;
+		CString gryimage = "../../images/";
+		gryimage += argv[2];
+		Load(gryimage, &imgclr);
+		Convert(imgclr,&gry1);
+		fig1.Draw(gry1);
+		fig1.SetTitle("Original image");
+		ImgFloat tmp(gry1.Width(), gry1.Height()), out(gry1.Width(), gry1.Height());
+		ImgFloat tmp1(gry1.Width(), gry1.Height()), out1(gry1.Width(), gry1.Height());
+		ImgFloat gmag(gry1.Width(), gry1.Height()); //gphase(gry1.Width(), gry1.Height());
+		ImgBinary bnryH(gry1.Width(), gry1.Height());
+
+
+		//building a 1D guassian convolution kernel
+		float f = 2.5;
+		float sigma=1.5;
+		//sigma = atof(argv[1]);
+		int mu = round((f*sigma) - 0.5);
+		int w = 2 * mu + 1;
+		double g[100];
+		double sum = 0;
+		for (int i = 0; i <= w - 1; i++)
+		{
+			g[i] = exp((-(i - mu)*(i - mu)) / (2 * sigma*sigma));
+			sum = sum + g[i];
+		}
+		for (int i = 0; i <= w - 1; i++)
+		{
+			g[i] = g[i] / sum;
+		}
+
+		//printing the gaussian convolution kernel
+		printf("\nthe gaussian convolution kernel is\n");
+		for (int i = 0; i <= w - 1; i++)
+		{
+			printf("\t %f ", g[i]);
+		}
+
+
+		//building a guassian derivative convolution kernel G'
+		double gd[100];
+		double sum1 = 0;
+		for (int i = 0; i <= w - 1; i++)
+		{
+			gd[i] = (i - mu) * exp((-(i - mu)*(i - mu)) / (2 * sigma*sigma));
+			sum1 += gd[i] * i;
+		}
+		for (int i = 0; i <= w - 1; i++)
+		{
+			gd[i] = gd[i] / sum1;
+		}
+
+		//printing the gaussian derivative convolution kernel G'
+		printf("\nthe gaussian derivative convolution kernel is\n");
+		for (int i = 0; i <= w - 1; i++)
+		{
+			printf("\t %f ", gd[i]);
+		}
+
+		//Calling function to find gx and gy
+		grad(gry1, mu, w, &out, &out1, g, gd);
+		fig2.Draw(out);
+		fig2.SetTitle("Gx");
+		Figure fig4;
+		fig4.Draw(out1);
+		fig4.SetTitle("Gy");
+		
+		//Calling function to find magnitude image
+		magni(gry1, &gmag, out, out1);
+		Figure mag;
+		mag.Draw(gmag);
+		mag.SetTitle("magnitude image");
+		//Figure phase;
+		//phase.Draw(gphase);
+		//phase.SetTitle("phase image");
+
+		//Calling function for non-maximum supression
+		//ImgFloat gsup(gry1.Width(), gry1.Height());
+		//gsup = gmag;
+		//supprsd(gry1, gphase, gmag, &gsup);
+		//Figure supressed;
+		//supressed.Draw(gsup);
+		//supressed.SetTitle("Non-maximum supressed image");
+
+		
+
+		//Calling function for obtaining canny image
+		/*canny(gry1, gsup, &bnryH);
+		Figure bin2;
+		bin2.Draw(bnryH);
+		bin2.SetTitle("Canny edge image");*/
+
+
+		//chamfering using manhattan distance
+		ImgFloat chmfr(gry1.Width(), gry1.Height());
+		Set(&chmfr, 1.0);
+		for (int y = 1; y < (gry1.Height() - 1); y++)
+		{
+			for (int x = 1; x < (gry1.Width() - 1); x++)
+			{
+
+				if (bnryH(x, y) == 1)
+					chmfr(x, y) = 0;
+				else
+					chmfr(x, y) = min((1 + chmfr(x - 1, y)), (1 + chmfr(x, y - 1)));
+
+			}
+		}
+		for (int y = (gry1.Height() - 1); y > 0; y--)
+		{
+			for (int x = (gry1.Width() - 1); x > 0; x--)
+			{
+				if (chmfr(x, y) != 1)
+				{
+					chmfr(x, y) = min((chmfr(x, y)), (1 + chmfr(x + 1, y)));
+					chmfr(x, y) = min((chmfr(x, y)), (1 + chmfr(x, y + 1)));
+				}
+			}
+		}
+
+		Figure champ;
+		champ.Draw(chmfr);
+		champ.SetTitle("chamfer image");
+
+
+		//if the tHrd image is present
+		if (argc == 4)
+		{
+			Figure fig3;
+			CString gryimage = "../../images/";
+			gryimage += argv[3];
+			Load(gryimage, &gry2);
+			fig3.Draw(gry2);
+			fig3.SetTitle("optional third image");
+			ImgFloat tmpx(gry2.Width(), gry2.Height()), outx(gry2.Width(), gry2.Height());
+			Set(&outx, 0);
+			Set(&tmpx, 0);
+			ImgFloat tmpy(gry2.Width(), gry2.Height()), outy(gry2.Width(), gry2.Height());
+			Set(&outy, 0);
+			Set(&tmpy, 0);
+			ImgFloat gmag1(gry2.Width(), gry2.Height()), gphase1(gry2.Width(), gry2.Height());
+			Set(&gmag1, 0);
+			Set(&gphase1, 0);
+			ImgBinary bnryH1(gry2.Width(), gry2.Height());	
+			Set(&bnryH1, 0);
+			grad(gry2, mu, w, &outx, &outy, g, gd);
+			phaseandmag(gry2, &gmag1, &gphase1, outx, outy);
+			ImgFloat gsup1(gry2.Width(), gry2.Height());
+			Set(&gsup1, 0);
+			gsup1 = gmag1;
+			supprsd(gry2, gphase1, gmag1, &gsup1);
+			canny1(gry2, gsup1, &bnryH1);   
+			Figure highbin;
+			highbin.Draw(bnryH1); highbin.SetTitle("Template image");
+			//inverse probability map
+			float count=0 ;
+			ImgFloat invprob(chmfr.Width()-bnryH1.Width(), chmfr.Height()-bnryH1.Height());
+			Set(&invprob, 0);
+			for (int y = 0; y < (chmfr.Height()-bnryH1.Height() ); y++)
+			{
+				for (int x = 0; x < (chmfr.Width() - bnryH1.Width()); x++)
+				{
+					count = 0;
+					for (int j = 0; j < (bnryH1.Height() ); j++)
+					{
+						for (int i = 0; i < (bnryH1.Width() ); i++)
+						{
+							if (bnryH1(i, j) == 1)
+							{
+								count += chmfr(x + i, y + j);
+								invprob(x,y) = count;
+							}
+						}
+						
+					}
+					
+				}
+			}
+			Figure invpro;
+			invpro.Draw(invprob); invpro.SetTitle("inverse probability map");
+
+			//Finding the minimum value in the probability map
+			float mini=invprob(0,0);
+
+			for (int y = 0; y <invprob.Height(); y++)
+			{
+				for (int x = 0; x < invprob.Width(); x++)
+				{
+					
+					if (invprob(x, y) < mini)
+						mini = invprob(x, y);
+				}
+			}
+			
+			//Finding the co-ordinate values of minimum value
+			int a = 0, b = 0;
+			for (int y = 0; y <invprob.Height(); y++)
+			{
+				for (int x = 0; x < invprob.Width(); x++)
+				{
+					if (invprob(x, y) == mini)
+					{
+						a = x;
+						b = y;
+					}
+				}
+			}
+			
+
+			//To draw a rectangle on the cherrypepsi image
+			Point pt1,pt2;
+			Bgr colour;
+			colour.r = 255;
+			colour.g = 255;
+			colour.b = 255;
+			pt1.x = a+25;
+			pt1.y = b+58;
+			pt2.x = a +25+ bnryH1.Width();
+			pt2.y = b +58+ bnryH1.Height();
+			Rect rect1(pt1, pt2);
+			DrawRect(rect1, &imgclr, colour, 1);
+			Figure drawnimg;
+			drawnimg.Draw(imgclr); drawnimg.SetTitle("Final Image");
+
+
+
+		}
+		
+
+
+
+
+
+
+
+
+
+
+		// Loop forever until user presses Ctrl-C in terminal window.
+
+		EventLoop();
+
+		return 0;
+	}
+
+	catch (const Exception &b)
+	{
+		b.Display();
+	}
+}

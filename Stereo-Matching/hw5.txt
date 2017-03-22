@@ -1,0 +1,228 @@
+// Homework.cpp : Defines the entry point for the console application.
+//
+
+#include <afxwin.h>  // necessary for MFC to work properly
+#include "Homework.h"
+#include "../../src/blepo.h"
+#include<queue>
+#include<stack>
+
+
+
+#ifdef _DEBUG
+#define new DEBUG_NEW
+#endif
+
+using namespace blepo;
+
+
+
+
+
+
+
+
+int main(int argc, const char* argv[], const char* envp[])
+{
+	try
+	{
+		// Initialize MFC and return if failure
+		HMODULE hModule = ::GetModuleHandle(NULL);
+		if (hModule == NULL || !AfxWinInit(hModule, NULL, ::GetCommandLine(), 0))
+		{
+			printf("Fatal Error: MFC initialization failed (hModule = %x)\n", (int)hModule);
+			return 1;
+		}
+		//Obtaining the left and right image
+		ImgGray gryl, gryr;
+		ImgBgr clr1, clr2;
+		Figure fig1, fig2;
+		CString gryimage = "../../images/";
+		gryimage += argv[1];
+		Load(gryimage, &clr1);
+		Convert(clr1, &gryl);
+		fig1.Draw(gryl);
+		fig1.SetTitle("Original left image");
+		CString gryimage1 = "../../images/";
+		gryimage1 += argv[2];
+		Load(gryimage1, &clr2);
+		Convert(clr2, &gryr);
+		fig2.Draw(gryr);
+		fig2.SetTitle("Original right image");
+
+		//Obtaining maximum disparity
+		int max_disp = atof(argv[3]);
+		int min_disp = 0;
+
+		//block matching
+		//creating a 5*1 kernel and initialsing all values to 1
+		int kernal[5];
+		for (int k = 0; k < 5; k++)
+		{
+			kernal[k] = 1;
+		}
+
+		//Width and halfwidth
+		int w = 5;
+		int hw = 2;
+
+		vector<vector<vector<int>>> dbar(max_disp + 1, vector<vector<int>>(gryl.Width(), vector<int>(gryl.Height()))); //3 Dimensional vector
+		vector<vector<vector<int>>>  temp;//temporary 3D vector used for convolution
+		temp = dbar;
+
+		//disparity mapping
+		for (int d = min_disp; d < max_disp; d++)
+		{
+			for (int y = 0; y <= gryl.Height() - 1; y++)
+			{
+				for (int x = 0; x <= gryl.Width() - 1; x++)
+				{
+					if (!(x - d < 0))
+						dbar[d][x][y] = abs(gryl(x, y) - gryr(x - d, y));
+					else
+						dbar[d][x][y] = 0;
+				}
+			}
+			// convolve horizontal
+			for (int y = 0; y < gryl.Height(); y++)
+			{
+				for (int x = hw; x < (gryl.Width() - hw); x++)
+				{
+					int val1 = 0;
+					for (int i = 0; i < w; i++)
+						val1 = val1 + kernal[i] * dbar[d][x + hw - i][y];
+					temp[d][x][y] = val1;
+				}
+			}
+			// convolve vertical
+			for (int y = hw; y < (gryl.Height() - hw); y++)
+			{
+				for (int x = 0; x < gryl.Width(); x++)
+				{
+					int val2 = 0;
+					for (int i = 0; i < w; i++)
+						val2 = val2 + kernal[i] * temp[d][x][y + hw - i];
+					dbar[d][x][y] = val2;
+
+				}
+			}
+		}
+
+		//Disparity map
+		ImgFloat disparity(gryl.Width(), gryl.Height());
+		Set(&disparity, 0);
+		int dh = 0;
+		for (int y = 0; y < gryl.Height(); y++)
+		{
+			for (int x = 0; x < gryl.Width(); x++)
+			{
+				int min = 9999;
+				for (int d = 0; d < max_disp; d++)
+				{
+					if (dbar[d][x][y] < min)
+					{
+						min = dbar[d][x][y];
+						dh = d;
+					}
+				}
+				disparity(x, y) = dh;
+			}
+		}
+		Figure leftu;
+		leftu.Draw(disparity);
+		leftu.SetTitle("Left image");
+
+
+		//Left-right consistent check
+		ImgFloat rightu(gryl.Width(), gryl.Height());
+		Set(&rightu, 0);
+		int dh2 = 0;
+		for (int y = 0; y < gryl.Height(); y++)
+		{
+			for (int x = 0; x < gryl.Width(); x++)
+			{
+				int min1 = 9999;
+				for (int d = 0; d < max_disp; d++)
+				{
+					if (x < gryl.Width() - 13 && x > 13)
+					{
+						if ((dbar[d][x - disparity(x, y) + d][y]) < min1)
+						{
+							min1 = dbar[d][x - disparity(x, y) + d][y];
+							dh2 = d;
+						}
+					}
+					else
+						rightu(x, y) = disparity(x, y);
+				}
+				rightu(x, y) = dh2;
+			}
+		}
+		Figure test1;
+		test1.Draw(rightu);
+		test1.SetTitle("Right image");
+
+		ImgFloat left_check(gryl.Width(), gryl.Height());
+		Set(&left_check, 0);
+		for (int y = 0; y < gryl.Height(); y++)
+		{
+			for (int x = 0; x < gryl.Width(); x++)
+			{
+				if (rightu(x, y) == disparity(x, y))
+				{
+					left_check(x, y) = disparity(x, y);
+				}
+			}
+		}
+		Figure checkimg;
+		checkimg.Draw(left_check);
+		checkimg.SetTitle("Left Right Consistency Check");
+
+		//depth image
+		int k = 1100;
+		ImgFloat depthimg(gryl.Width(), gryl.Height());
+
+		for (int y = 0; y < gryl.Height(); y++)
+			for (int x = 0; x < gryl.Width(); x++)
+				if (left_check(x, y)>0)
+					depthimg(x, y) = k / left_check(x, y);
+		Figure depth;
+		depth.Draw(depthimg);
+		depth.SetTitle("depth image");
+		int count = 0;
+		for (int y = 0; y < gryl.Height(); y++)
+		{
+			for (int x = 0; x < gryl.Width(); x++)
+			{
+				if (depthimg(x, y) != 0)
+					count++;
+			}
+		}
+
+
+		//Converting to ply file
+		FILE *pFile;
+		pFile = fopen("arjnimg.ply", "w+");
+		fprintf(pFile, "ply \nformat ascii 1.0 \nelement vertex %d \nproperty float x\nproperty float y\nproperty float z\nproperty uchar diffuse_red\nproperty uchar diffuse_green\nproperty uchar diffuse_blue\nend_header\n", count);
+
+		for (int y = 0; y < gryl.Height(); y++)
+		{
+			for (int x = 0; x < gryl.Width(); x++)
+			{
+				if (depthimg(x, y) != 0)
+					fprintf(pFile, "%d -%d -%f %d %d %d \n", x, y, depthimg(x, y), clr1(x, y).r, clr1(x, y).g, clr1(x, y).b);
+			}
+		}
+		fclose(pFile);
+		// Loop forever until user presses Ctrl-C in terminal window.
+
+		EventLoop();
+
+		return 0;
+	}
+
+	catch (const Exception &b)
+	{
+		b.Display();
+	}
+}
